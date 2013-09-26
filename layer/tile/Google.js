@@ -8,7 +8,7 @@ L.Google = L.Class.extend({
 
 	options: {
 		minZoom: 0,
-		maxZoom: 18,
+		maxZoom: 21,
 		tileSize: 256,
 		subdomains: 'abc',
 		errorTileUrl: '',
@@ -26,6 +26,9 @@ L.Google = L.Class.extend({
 		if (!this._ready) L.Google.asyncWait.push(this);
 
 		this._type = type || 'SATELLITE';
+		
+		if (this._type == 'ROADMAP') this.options.maxZoom = 21;
+		if (this._type == 'TERRAIN') this.options.maxZoom = 15;
 	},
 
 	onAdd: function(map, insertAtTheBottom) {
@@ -42,6 +45,18 @@ L.Google = L.Class.extend({
 		this._limitedUpdate = L.Util.limitExecByInterval(this._update, 150, this);
 		map.on('move', this._update, this);
 
+		map.on('zoomend', function (e) {
+			var center = e.target.getCenter();
+			var _center = new google.maps.LatLng(center.lat, center.lng);
+			if (this._type == 'SATELLITE') {
+				this._maxzoomservice.getMaxZoomAtLatLng(_center, function(response) {
+					if (response.status == google.maps.MaxZoomStatus.OK && response.zoom < e.target._zoom) {
+						e.target.zoomOut();
+					}
+				});
+			}
+		}, this);
+		
 		map.on('zoomanim', function (e) {
 			var center = e.center;
 			var _center = new google.maps.LatLng(center.lat, center.lng);
@@ -58,13 +73,11 @@ L.Google = L.Class.extend({
 
 	onRemove: function(map) {
 		this._map._container.removeChild(this._container);
-		//this._container = null;
 
 		this._map.off('viewreset', this._resetCallback, this);
 
 		this._map.off('move', this._update, this);
 		map._controlCorners['bottomright'].style.marginBottom = "0em";
-		//this._map.off('moveend', this._update, this);
 	},
 
 	getAttribution: function() {
@@ -120,9 +133,12 @@ L.Google = L.Class.extend({
 		var _this = this;
 		this._reposition = google.maps.event.addListenerOnce(map, "center_changed",
 			function() { _this.onReposition(); });
+		
+		var maxZoomService = new google.maps.MaxZoomService();
 
 		map.backgroundColor = '#ff0000';
 		this._google = map;
+		this._maxzoomservice = maxZoomService;
 	},
 
 	_resetCallback: function(e) {
@@ -142,7 +158,6 @@ L.Google = L.Class.extend({
 
 		this._google.setCenter(_center);
 		this._google.setZoom(this._map.getZoom());
-		//this._google.fitBounds(google_bounds);
 	},
 
 	_resize: function() {
